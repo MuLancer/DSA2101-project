@@ -1,0 +1,293 @@
+---
+title: "DSA Group Project: Deforestation"
+author: "Hang Yizhou, Li Minyi, Qin Mulan, Sow Yun Tsing, Su Zhimin"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::robobook:
+    downcute_theme: "chaos"
+    self_contained: true
+    thumbnails: false
+    lightbox: true
+    gallery: false
+    highlight: tango
+    toc_depth: 4
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning =FALSE, message=FALSE, out.width = "100%")
+```
+
+Load the necessary library
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(readr)
+library(RColorBrewer)
+library(gridExtra)
+library(ggthemes)
+library(knitr)
+```
+
+## Introduction
+Deforestation remains a critical global challenge, with a net forest conversion of -5,150,000 hectares annually. In this study, we aim to dissect the extent and drivers of this phenomenon, focusing on the following question:
+
+**What are the primary factors contributing to the recent trend of deforestation in the world's most deforested countries?**
+
+Starting from identifying the world's most deforested countries, we examine the trends and primary causes of deforestation within Brazil which ranks first in deforestation, to extrapolate insights applicable to other severely deforested countries.   
+
+
+### Data
+We sourced data from the Global Deforestation dataset via TidyTuesday, originally obtained from Our World in Data (Hannah Ritchie and Max Roser, 2021). 
+
+Our analysis utilises five datasets: forest, forest_area, brazil_loss, soybean_use, and vegetable_oil. The following are the variables relevant to our analysis from each dataset:
+```{r echo=FALSE}
+forest_data <- data.frame(
+  Variable = c("entity", "code", "year", "net_forest_conversion"),
+  Class = c("character", "character", "double", "double"),
+  Description = c("Country", "Country code", "Year", "Net forest conversion in hectares")
+)
+
+forest_area_data <- data.frame(
+  Variable = c("entity", "code", "year", "forest_area"),
+  Class = c("character", "character", "integer", "double"),
+  Description = c("Country", "Country Code", "Year", "Percent of global forest area")
+)
+
+brazil_loss_data <- data.frame(
+  Variable = c("entity", "code", "year", "commercial_crops", "flooding_due_to_dams", 
+               "natural_disturbances", "pasture", "selective_logging", "fire", 
+               "mining", "other_infrastructure", "roads", 
+               "tree_plantations_including_palm", "small_scale_clearing"),
+  Class = c(rep("character", 3), rep("double", 11)),
+  Description = c("Country", "Country code", "Year", "Commercial crops", "Flooding", 
+                  "Natural disturbances", "Pasture for livestock", "Logging for lumber", 
+                  "Fire loss", "Mining", "Infrastructure", "Roads", 
+                  "Tree plantations", "Small scale clearing")
+)
+
+soybean_use_data <- data.frame(
+  Variable = c("entity", "code", "year", "human_food", "animal_feed", "processed"),
+  Class = c("character", "character", "double", "double", "double", "double"),
+  Description = c("Country", "Country Code", "Year", "Use for human food (tempeh, tofu, etc.)", 
+                  "Used for animal food", "Processed into vegetable oil, biofuel, animal feed")
+)
+
+vegetable_oil_data <- data.frame(
+  Variable = c("entity", "code", "year", "crop_oil", "production"),
+  Class = c("character", "character", "double", "character", "double"),
+  Description = c("Country", "Country code", "Year", "Crop that was used to produce vegetable oil", 
+                  "Oil production in tonnes")
+)
+
+kable(forest_data, caption = "Forest Change every 5 years for forest area in conversion")
+kable(forest_area_data, caption = "Change in global forest area as a percent of global forest area.")
+kable(brazil_loss_data, caption = "Loss of Brazilian forest due to specific types.")
+kable(soybean_use_data, caption = "Soybean production and use by year and country.")
+kable(vegetable_oil_data, caption = "Vegetable oil production by crop type and year.")
+```
+
+
+
+## Data Visualisation and Discussion
+
+Read data
+```{r}
+
+#Change every 5 years for forest area in conversion
+forest <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest.csv',show_col_types = FALSE)
+#Change in global forest area as a percent of global forest area
+forest_area <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest_area.csv',show_col_types = FALSE)
+#Loss of Brazilian forest due to specific types
+brazil_loss <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/brazil_loss.csv',show_col_types = FALSE)
+#Soybean production and use by year and country
+soybean_use <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/soybean_use.csv',show_col_types = FALSE)
+#Vegetable oil production by crop type and year
+vegetable_oil <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/vegetable_oil.csv',show_col_types = FALSE)
+
+```
+
+
+### Plot 1: World distribution
+```{r}
+
+options(scipen = 999)
+
+complete_data = forest %>% 
+  drop_na() %>% 
+  filter(year != 2015) %>% 
+  count(entity) %>% 
+  filter(n == 3) %>% 
+  pull(entity)
+
+top_countries = forest %>% 
+  filter(entity %in% complete_data) %>%
+  group_by(entity) %>% 
+  summarize(total = sum(net_forest_conversion)) %>%
+  filter (entity != "World") %>% 
+  slice_max(abs(total), n = 15) %>% 
+  mutate(entity = fct_reorder(entity, total))
+
+sum_gain = top_countries %>% 
+  filter(total >0) %>% 
+  summarize(sum = sum(total)) %>% 
+  pull(sum)
+
+ggplot (data = top_countries, 
+        aes(x = total/1000, y = entity, fill = total > 0)) +
+  geom_col() +
+  scale_fill_manual(values = c ("brown", "darkgreen")) +
+  theme_bw() +
+  labs(x = "Sum of Net Forest Area Change (in thousand hectares)", y = "",
+       title = "15 Countries with the Largest Changes in Forest Area From 1990 to 2010") +
+  theme(legend.position = "none",
+        plot.title = element_text(face = "bold", hjust = 0.5)) +
+  scale_x_continuous(limits = c (-11000, 11000),
+                     breaks = seq(-12000, 12000, 4000)) +
+  geom_vline(xintercept = 0, color = "grey5") +
+  geom_vline(xintercept = -sum_gain/1000, color = "grey5", linetype = "dashed") +
+  theme(axis.ticks.y = element_blank(), axis.ticks.x = element_blank()) +
+  annotate("text", x = -7500, y = 15, label = "Sum of afforestation of ") +
+  annotate("text", x = -6900, y = 14.2, label = "4 most afforested countries:") +
+  annotate("text", x = -8600, y = 13.4, label = "10863 hectares") +
+  annotate("text", x = -7000, y = 3.0, label = "Brazil Deforestation:") +
+  annotate("text", x = -7700, y = 2.2, label = "10724 hectares")
+```
+
+
+#### Data Manipulation
+
+Firstly, we used the `forest` data set to understand the different behaviors countries exhibit in terms of net forest conversion. Our aim is to identify which countries have gained the most forest area and which have lost the most. In the first graph, we selected the top 15 countries with the most significant changes in forest area from 1990 to 2010. To construct this, we first filtered the relevant data points for the years 1990, 2000, and 2010, and removed countries with insufficient data. The year of 2015 is omitted because most countries do not have the data of 2015. We then calculated the amount of change in forest area by summing up the net forest area change for each country for the 3 data points. Then, we determined the top 15 countries by sorting them based on the absolute value of their net changes.  
+
+#### Analysis and Discussion
+The graph reveals that out of the 15 countries with the largest changes in forest area, only 4 are gaining forest area, while the other 11 have experienced a loss. Countries with the most substantial deforestation include Brazil, Tanzania, and Myanmar, while countries gaining forest area are China, India, the United States, and Vietnam. Among them, Brazil stands out with the most significant loss of forest area. In fact, the extent of deforestation in Brazil is so severe that the loss in its forest needs to be compensated by the gain in forest area in the top 4 most afforested countries, as indicated by the dashed line on the left. 
+
+
+### Plot 2: Brazil loss
+```{r}
+options(scipen = 999)
+
+  
+brazil_loss_new <- brazil_loss %>% 
+  rename_all(~str_replace_all(., "_", " ")) %>%
+  pivot_longer(c(-entity, -code, -year), 
+               names_to = "causes", values_to = "loss_area") %>%
+  rename("Causes" = "causes")
+
+total_forest_loss <- brazil_loss_new %>%
+  group_by(year) %>%
+  summarise(sum = sum(loss_area))
+  
+ggplot() +
+  geom_area(data = brazil_loss_new, aes(x = year, y = loss_area, fill = Causes)) +
+  geom_line(data = total_forest_loss, aes(x = year, y = sum),
+            size = 1) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "RdYlBu") +
+  labs(x = "Year", y = "Total Forest Area Lost (in hectares)", 
+       title = "Trend and Causes of Deforestation in Brazil From 2001 to 2013") +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5)) +
+  scale_x_continuous(breaks = seq(2001, 2013, by = 2))
+```
+
+
+#### Data Manipulation
+After examining Brazil as the country with the most significant forest loss in terms of total forest loss from 1990 to 2010, we want to delve into the causes of its deforestation. We will examine data from 2001 to 2013 from the `brazil_loss` data set as we only have access to data from that time period. A line plot and area plot is created, showing the proportions of different factors contributing to deforestation across different years in Brazil. The x-axis represents the years from 2001 to 2013. The y-axis represents the amount of forest loss in hectares.
+
+#### Analysis and Discussion
+The plot consists of multiple colored bands stacked on top of each other. Each band represents a different cause of deforestation. The colors correspond to different causes of deforestation such as pasture, commercial crops, etc, shwon in the legend. The width of each colored band indicates the amount of deforestation caused by the respective factor in a given year. The wider the band, the more significant the loss due to that factor. The stacked colored bands illustrate the cumulative effect of all causes of deforestation in Brazil for each year. Also, the black line in the plot shows the overall trend of total forest loss across the years.
+
+There appears to be a downward trend in the total forest loss, which suggests that deforestation rates is slowing down in Brazil. Additionally, while we cannot determine the exact figure from the plot, it is evident that pasture and commercial crops accounted for the largest proportion of the total forest loss. More importantly, as pasture and production of commercial crops decreased, so did total forest loss. This suggests a potential correlation between these causes and the overall deforestation trend. Therefore, a conclusion is made that **pasture** and **commercial crops** are the two primary factors contributing to the forest loss in Brazil.
+
+
+
+### Plot 3: Forest area against Processed Soybean Production and Vegetable Oil Production
+```{r}
+worst_6 = forest %>% 
+  drop_na() %>% 
+  filter(entity != "World") %>%
+  group_by(entity) %>%
+  summarize(average = mean(net_forest_conversion), .groups = "drop") %>%
+  slice_min(average, n = 8) %>%
+  filter (entity != "Tanzania" & entity != "Mozambique")
+
+soybean_worst_6 = soybean_use %>% 
+  filter (entity %in% worst_6$entity) %>%
+  filter(1990 <= year & year <= 2015) %>% 
+  select (-animal_feed, -human_food) %>%
+  drop_na() 
+
+forest_area_worst_6 = forest_area %>% 
+  filter (entity %in% soybean_worst_6$entity) %>%
+  left_join(soybean_worst_6, by = c("entity", "year")) %>% 
+  drop_na() %>% 
+  filter (processed != 0)
+
+veg_oil_worst_6 = vegetable_oil %>% 
+  drop_na() %>% 
+  group_by(entity, code, year) %>%
+  summarize (total = sum(production), .groups = "drop") %>% 
+  filter (entity %in% worst_6$entity)
+
+forest_area_worst_6 = forest_area_worst_6 %>% 
+  left_join(veg_oil_worst_6, by = c ("entity","year")) %>% 
+  drop_na() %>% 
+  filter(total != 0)
+
+ggplot(data = forest_area_worst_6, aes(y = forest_area)) +
+  geom_point(aes(x = total/1000, color = "Vegetable Oil")) +
+  geom_point(aes(x = processed/1000, color = "Processed Soy Bean")) +
+  geom_smooth(aes(x = total/1000), method = "lm", formula = y~x, color = 'darkblue') +
+  geom_smooth(aes(x = processed/1000), method = "lm", formula = y~x, color = 'darkblue') +
+  facet_wrap(~entity, nrow = 2, scale = 'free') +
+  labs(x = "Amount Produced (in thousand tonnes)", 
+       y = "Percentage of Global Forest Area", 
+       title = "Impact of Production on Forest Area From 1990 to 2013") +
+  scale_color_manual(name = "Type",
+                     labels = c("Vegetable Oil", "Processed Soy Bean"),
+                     values = c("darkturquoise", "coral1")) +
+  #scale_x_continuous(trans = "log10")+
+  theme_bw() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold", hjust = 0.5)) +
+  theme(axis.text.x = element_text(size = 6))
+  
+
+```
+
+
+#### Data Manipulation
+After looking into the causes of deforestation in Brazil, we noticed that pastures and commercial crops are some of the most significant reasons behind the loss of forest area. The `soybean_use` and `vegetable_oil` data sets are the only relevant data sets that could possibly explain pastures and the production of commercial crops among all accessible data sets. Thus, we want to determine the relationship between the quantity of these productions, and the change in forest area. Processed soy bean production is used to show the total soy bean production because the other two types - `animal_feed` and `human_food` - contain lots of missing values which may lead to bias in our conclusion. Also, preliminary exploration of data set shows that `animal_feed` and `human_food` only take up a tiny proportion of total soybean production so the removal will still give a rather accurate trend. 
+
+Due to the lack of yearly data in `forest` data set, we used the percentage of global forest area from `forest_area` data set to represent forest area for our correlation analysis. This method provides a useful general indicator and is practical given that each country's forest area constitutes only a small fraction of the global total. To do so, we examine the soybean and vegetable oil production from 1990 to 2015 in 6 countries that faced the greatest average loss in forest area. Tanzania and Mozambique were filtered out, due to the lack of data on soybean production.
+
+#### Analysis and Discussion
+For all the 6 countries, it was noted that there is an overall negative correlation between the production of soybean/vegetable oil and forest area. Forest area could have been cleared to make way for the growth of these crops. For Argentina, Bolivia, Brazil and Paraguay, vegetable oil had a relatively higher impact on the decrease in forest area compared to soybean production, due to the steeper gradient observed. On the other hand, for Indonesia and Myanmar, soybean production had a relatively higher impact. 
+
+
+## Conclusion
+
+In conclusion, our analysis has focused on global forest area changes, with a particular emphasis on countries that have undergone the most significant deforestation over recent decades. After identifying Brazil as the most deforested country, we explored the factors contributing to its deforestation, examining trends over the years, and investigating specific human activities such as soybean and vegetable oil production. Applying our findings to other severely deforested countries, it confirms that these factors are strongly negatively correlated with forest area.
+
+However, our study has limitations that should be considered. In plot 1, values used do not precisely represent the actual net forest change over the 20 years. This discrepancy arises because the `forest` data set provides the net forest change every 5 years, while the 3 data points (1990, 2000, 2010) are separated by 10 years, meaning that the net forest area change in 1990-1995 and 2000-2005 is unknown. Nevertheless, the graph should still be considered to be useful and meaningful to show the general trend of deforestation because most countries in the data set exhibit a similar deforestation trend based on the existing data points: their forest area has been either constantly decreasing or constantly increasing. 
+
+In plot 3, we used the percentage of global forest area from `forest_area` data set to represent forest area for our correlation analysis. While this method provides a useful general indicator, it does have its drawbacks. For instance, an increase in the forest area percentage of one country does not necessarily reflect an increase in its actual forest area, as it could be influenced by changes in the total global forest area. Therefore, further research and data is needed to enhance the accuracy and depth of the analysis.
+
+
+
+
+## Reference
+TidyTuesday Contributors. (2021). Data on corporate diversity for the TidyTuesday project. Retrieved April 14, 2024, from https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-04-06/readme.md
+
+## About
+The work is equally distributed to every member of the group.
+```{r echo=FALSE}
+about <- data.frame(
+  Name = c("Hang Yizhou", "Li Minyi", "Qin Mulan", "Sow Yun Tsing", "Su Zhimin"),
+  Year = c(2, 2, 2, 2, 2),
+  Major = c("DSE", "DSE", "DSE", "DSE", "DSE"))
+
+knitr::kable(about, format = "markdown")
+
+```
+
+TO OUR GROUP: I really love all my lovely and efficient and brilliant groupmates.
